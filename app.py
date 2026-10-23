@@ -11,20 +11,30 @@ st.set_page_config(page_title="AI-03 Interview Agent", layout="wide")
 
 
 def llm_json(system, user, max_tokens=2500, tries=3):
-    last = None
+    last, use_temp = None, True
     for _ in range(tries):
         try:
-            r = client.messages.create(
-                model=MODEL, max_tokens=max_tokens, temperature=0,
+            kw = dict(
+                model=MODEL, max_tokens=max_tokens,
                 system=system + "\nReturn ONLY valid JSON. No markdown, no preamble.",
                 messages=[{"role": "user", "content": user}],
             )
+            if use_temp:
+                kw["temperature"] = 0
+            r = client.messages.create(**kw)
             txt = r.content[0].text.strip()
             txt = re.sub(r"^```(?:json)?|```$", "", txt).strip()
             return json.loads(txt)
+        except json.JSONDecodeError as e:
+            last = e
         except Exception as e:
             last = e
-    raise last
+            if use_temp:
+                use_temp = False  # retry without temperature
+            else:
+                break
+    st.error(f"LLM call failed -> {type(last).__name__}: {last}")
+    st.stop()
 
 
 SAMPLE_JD = """Backend Engineer (Python), FinPay Labs
